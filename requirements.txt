@@ -1,4 +1,6 @@
 Flask
 pandas
-XlsxWriter
 plotly
+xlsxwriter
+gunicorn
+werkzeug

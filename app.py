@@ -316,3 +316,27 @@ def edit_project(name):
     save_json(PROJECT_FILE, data)
 
     return redirect(url_for("view_project", name=new_name, success=1))
+
+@app.route("/create", methods=["POST"])
+def create_project():
+    data = load_data()
+
+    name = request.form["name"].strip()
+    budget = float(request.form["budget"])
+
+    if any(p["name"] == name for p in data):
+        return f"Le projet '{name}' existe déjà"
+
+    data.append({
+        "name": name,
+        "budget": budget,
+        "categories": {},
+        "expenses": [],
+        "start_date": request.form.get("start_date", ""),
+        "end_date": request.form.get("end_date", "")
+    })
+
+    save_data(data)
+
+    return redirect(url_for("index"))
+

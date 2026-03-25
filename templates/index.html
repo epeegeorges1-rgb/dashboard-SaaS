@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Dashboard Projets</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header>📊 Gestion de Projets</header>
+<div class="container">
+
+<h2>Créer un projet</h2>
+<div class="card">
+  <form method="post" action="/create">
+    <input name="name" placeholder="Nom du projet" required>
+    <input name="budget" type="number" step="0.01" placeholder="Budget total" required>
+    <input name="start_date" type="date" required>
+    <input name="end_date" type="date" required>
+    <button>Créer projet</button>
+  </form>
+</div>
+
+<h2>Projets existants</h2>
+{% for p in projects %}
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+    <a class="project-block" href="/project/{{p.name}}" style="flex:1; margin-right:10px;">{{p.name}}</a>
+    <form method="post" action="/delete_project/{{p.name}}" onsubmit="return confirm('Confirmer la suppression ?');">
+        <button type="submit" style="background:#f44336; padding:10px 15px;">🗑 Supprimer</button>
+    </form>
+</div>
+{% else %}
+<p>Aucun projet créé pour le moment.</p>
+{% endfor %}
+
+<h2>📊 Budget par durée des projets</h2>
+<div class="card" style="height:450px;">
+  <iframe src="/chart/budget_duration?ts={{ range(1,1000)|random }}" width="100%" height="100%" style="border:none;"></iframe>
+</div>
+
+<a href="{{ url_for('logout') }}" class="button-link">🚪 Déconnexion</a>
+</div>
+<footer>© 2026 Mon Dashboard Projets</footer>
+</body>
+</html>

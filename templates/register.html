@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Inscription</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header>📝 Inscription</header>
+<div class="container">
+  <div class="card">
+    <form method="post">
+      <input name="username" placeholder="Nom d'utilisateur" required>
+      <input name="password" type="password" placeholder="Mot de passe" required>
+      <button>S'inscrire</button>
+    </form>
+    <p>Déjà inscrit ? <a href="{{ url_for('login') }}">Se connecter</a></p>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>{{project.name}}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<header> Dashboard Projet - {{project.name}}</header>
+
+<div class="container">
+
+<a href="/" class="button-link">⬅ Retour</a>
+<a href="/export_excel/{{project.name}}" class="button-link">📥 Export Excel</a>
+
+<!--formulaire de modification des projet-->
+
+<div class="card">
+<h3>⚙️ Modifier le projet</h3>
+
+<form method="post" action="/edit_project/{{project.name}}" style="display:flex;flex-wrap:wrap;gap:10px;">
+
+<input name="new_name" value="{{project.name}}" required>
+
+<input name="budget" type="number" step="0.01" value="{{project.budget}}" required>
+
+<input name="start_date" type="date" value="{{project.start_date}}">
+
+<input name="end_date" type="date" value="{{project.end_date}}">
+
+<button>💾 Enregistrer</button>
+
+</form>
+</div>
+
+<!-- 🔔 Notification -->
+<div id="notification" style="position:fixed;top:20px;right:20px;background:#4CAF50;color:white;padding:15px;border-radius:10px;display:none;">
+✔️ Action réussie
+</div>
+
+<!-- ➕ AJOUT DEPENSE -->
+<div class="card">
+<h3>➕ Ajouter une dépense</h3>
+
+<form method="post" action="/add_expense/{{project.name}}" style="display:flex;flex-wrap:wrap;gap:10px;">
+<input name="title" placeholder="Titre" required>
+<input name="category" placeholder="Catégorie" required>
+<input name="amount" type="number" step="0.01" placeholder="Montant (€)" required>
+<input name="budget" type="number" step="0.01" placeholder="Budget catégorie">
+<input name="date" type="date">
+<button>Ajouter</button>
+</form>
+</div>
+
+<!-- 🔍 FILTRE -->
+<div class="card">
+<h3>🔍 Recherche</h3>
+<input id="searchInput" placeholder="Catégorie ou date..." onkeyup="filterTable()" style="width:100%;">
+</div>
+
+<!-- ⚠️ ALERTES -->
+{% if alerts %}
+<div class="card">
+<h3>⚠️ Alertes</h3>
+{% for a in alerts %}
+<p>{{a}}</p>
+{% endfor %}
+</div>
+{% endif %}
+
+<!-- 📊 PROGRESSION -->
+<div class="card">
+<h3>📊 Progression du budget</h3>
+{% set total_spent = summary|sum(attribute='spent') %}
+{% set total_budget = summary|sum(attribute='budget') %}
+{% set percent = (total_spent/total_budget*100) if total_budget>0 else 0 %}
+<div class="progress">
+<div class="progress-bar" style="width:{{percent}}%">{{percent|round(1)}}%</div>
+</div>
+</div>
+
+<!-- 📋 TABLEAU -->
+<div class="card">
+<h3>📋 Dépenses</h3>
+
+<table>
+<tr>
+<th>Titre</th>
+<th>Catégorie</th>
+<th>Montant</th>
+<th>Budget</th>
+<th>Restant</th>
+<th>%</th>
+<th>Actions</th>
+</tr>
+
+{% for row in table_rows %}
+<tr>
+
+<!-- FORM EDIT -->
+<form method="post" action="/edit_expense/{{project.name}}/{{row.index}}">
+<td><input name="title" value="{{row.title}}" required></td>
+<td><input name="category" value="{{row.category}}" required></td>
+<td><input name="amount" type="number" step="0.01" value="{{row.amount}}" required></td>
+<td><input name="budget" type="number" step="0.01" value="{{row.budget}}"></td>
+<td>{{row.remaining}}</td>
+<td>{{row.percent}}%</td>
+
+<td style="display:flex;gap:5px;">
+<button type="submit">💾</button>
+</form>
+
+<form method="post" action="/delete_expense/{{project.name}}/{{row.index}}" onsubmit="return confirm('Supprimer cette dépense ?');">
+<button style="background:#f44336;">🗑</button>
+</form>
+
+</td>
+
+</tr>
+{% endfor %}
+
+</table>
+</div>
+
+<!-- 🥧 CAMEMBERT -->
+<div class="card">
+<h3>🥧 Répartition des dépenses</h3>
+<iframe src="/chart/interactive/{{project.name}}" width="100%" height="400"></iframe>
+</div>
+
+<div class="card">
+<h3>📊 Évolution des dépenses</h3>
+<iframe src="/chart/timeline/{{project.name}}" width="100%" height="400"></iframe>
+</div>
+
+<!-- 📈 TIMELINE -->
+<div class="card">
+<h3>📈 Évolution dans le temps</h3>
+<iframe src="/chart/timeline/{{project.name}}" width="100%" height="400"></iframe>
+</div>
+
+<a href="{{ url_for('logout') }}" class="button-link">🚪 Déconnexion</a>
+
+</div>
+
+<footer>© 2026 Dashboard Pro</footer>
+
+<!-- JS -->
+<script>
+function filterTable() {
+    let input = document.getElementById("searchInput").value.toLowerCase();
+    let rows = document.querySelectorAll("table tr");
+
+    rows.forEach((row, index) => {
+        if (index === 0) return;
+        let text = row.innerText.toLowerCase();
+        row.style.display = text.includes(input) ? "" : "none";
+    });
+}
+
+function showNotification(msg) {
+    let n = document.getElementById("notification");
+    n.innerText = msg;
+    n.style.display = "block";
+    setTimeout(()=>{n.style.display="none"},3000);
+}
+
+window.onload = () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("success")) {
+        showNotification("✔️ Action réussie !");
+    }
+};
+</script>
+
+<div id="notification" style="
+position:fixed;
+top:20px;
+right:20px;
+background:#4CAF50;
+color:white;
+padding:15px;
+border-radius:10px;
+display:none;
+z-index:999;
+">
+✔️ Action réussie
+</div>
+
+<script>
+function showNotification(message) {
+    let notif = document.getElementById("notification");
+    notif.innerText = message;
+    notif.style.display = "block";
+
+    setTimeout(() => {
+        notif.style.display = "none";
+    }, 3000);
+}
+
+// Auto déclenche après action (simple version)
+window.onload = () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("success")) {
+        showNotification("✔️ Opération réussie !");
+    }
+};
+</script>
+
+
+</body>
+</html>

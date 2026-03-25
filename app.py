@@ -111,24 +111,34 @@ def index():
     projects = load_json(PROJECT_FILE)
     return render_template("index.html", projects=projects)
 
-@app.route("/create", methods=["POST"])
+@app.route("/add_expense/<project_name>", methods=["POST"])
 @login_required
-def create_project():
+def add_expense(project_name):
     data = load_json(PROJECT_FILE)
-    name = request.form["name"].strip()
-    budget = float(request.form["budget"])
-    if any(p["name"]==name for p in data):
-        return f"<p>Le projet '{name}' existe déjà.</p><a href='/'>Retour</a>"
-    data.append({
-        "name": name,
-        "budget": budget,
-        "categories": {},
-        "expenses": [],
-        "start_date": request.form.get("start_date",""),
-        "end_date": request.form.get("end_date","")
+    project = next((p for p in data if p["name"] == project_name), None)
+
+    if not project:
+        return "Projet introuvable"
+
+    title = request.form["title"]
+    category = request.form["category"]
+    amount = float(request.form["amount"])
+    date = request.form.get("date", "")
+
+    # ajouter catégorie si absente
+    if category not in project["categories"]:
+        project["categories"][category] = 0
+
+    project["expenses"].append({
+        "title": title,
+        "category": category,
+        "amount": amount,
+        "date": date
     })
-    save_json(PROJECT_FILE,data)
-    return redirect(url_for("index"))
+
+    save_json(PROJECT_FILE, data)
+
+    return redirect(url_for("view_project", name=project_name, success=1))
 
 @app.route("/project/<name>")
 @login_required

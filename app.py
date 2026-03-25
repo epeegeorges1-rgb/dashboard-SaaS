@@ -7,7 +7,7 @@ from functools import wraps
 import plotly.express as px
 
 app = Flask(__name__)
-app.secret_key = "ton_secret_key"  # Change pour prod
+app.secret_key = "super_secret_key_change_me"
 
 # ------------------ FILE SETUP ------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -20,14 +20,14 @@ USER_FILE = os.path.join(DATA_DIR, "users.json")
 def load_json(file_path):
     if os.path.exists(file_path):
         try:
-            with open(file_path,"r") as f:
+            with open(file_path, "r") as f:
                 return json.load(f)
-        except json.JSONDecodeError:
+        except:
             return []
     return []
 
 def save_json(file_path, data):
-    with open(file_path,"w") as f:
+    with open(file_path, "w") as f:
         json.dump(data, f, indent=4)
 
 # ------------------ AUTH ------------------
@@ -41,29 +41,267 @@ def login_required(f):
 
 @app.route("/register", methods=["GET","POST"])
 def register():
-    if request.method=="POST":
+    if request.method == "POST":
+        users = load_json(USER_FILE)
+
         username = request.form["username"].strip()
         password = request.form["password"].strip()
-        users = load_json(USER_FILE)
-        if any(u["username"]==username for u in users):
-            return "<p>Nom d'utilisateur déjà pris.</p><a href='/register'>Retour</a>"
-        hashed_pw = generate_password_hash(password)
-        users.append({"username": username, "password": hashed_pw})
+
+        if any(u["username"] == username for u in users):
+            return "Utilisateur déjà existant"
+
+        users.append({
+            "username": username,
+            "password": generate_password_hash(password)
+        })
+
         save_json(USER_FILE, users)
         return redirect(url_for("login"))
+
     return render_template("register.html")
 
 @app.route("/login", methods=["GET","POST"])
 def login():
-    if request.method=="POST":
+    if request.method == "POST":
+        users = load_json(USER_FILE)
+
         username = request.form["username"].strip()
         password = request.form["password"].strip()
-        users = load_json(USER_FILE)
-        user = next((u for u in users if u["username"]==username), None)
+
+        user = next((u for u in users if u["username"] == username), None)
+
         if user and check_password_hash(user["password"], password):
             session["username"] = username
             return redirect(url_for("index"))
-        return "<p>Identifiants incorrects.</p><a href='/login'>Retour</a>"
+
+        return "Identifiants incorrects"
+
+    return render_template("login.html")
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+# ------------------ HELPERS ------------------
+def compute_totals(project):
+    totals = {}
+    for e in project["expenses"]:
+        totals[e["category"]] = totals.get(e["category"], 0) + e["amount"]
+    return totals
+
+def compute_summary(project):
+    totals = compute_totals(project)
+    summary = []
+
+    for cat, budget in project.get("categories", {}).items():
+        spent = totals.get(cat, 0)
+        remaining = budget - spent
+        percent = (spent / budget * 100) if budget > 0 else 0
+
+        summary.append({
+            "category": cat,
+            "budget": budget,
+            "spent": spent,
+            "remaining": remaining,
+            "percent": round(percent, 1)
+        })
+
+    return summary
+
+def generate_alerts(summary):
+    alerts = []
+    for s in summary:
+        if s["percent"] > 100:
+            alerts.append(f"⚠️ Dépassement dans {s['category']}")
+        elif s["percent"] > 80:
+            alerts.append(f"⚠️ Attention: {s['category']} presque atteint")
+    return alerts
+
+# ------------------ ROUTES ------------------
+@app.route("/")
+@login_required
+def index():
+    projects = load_json(PROJECT_FILE)
+    return render_template("index.html", projects=projects)
+
+# ---------------- CREATE PROJECT ----------------
+@app.route("/create", methods=["POST"])
+@login_required
+def create_project():
+    data = load_json(PROJECT_FILE)
+
+    name = request.form.get("name", "").strip()
+    budget = float(request.form.get("budget", 0))
+
+    if not name:
+        return "Nom invalide"
+
+    if any(p["name"] == name for p in data):
+        return f"Le projet '{name}' existe déjà"
+
+    data.append({
+        "name": name,
+        "budget": budget,
+        "categories": {},
+        "expenses": [],
+        "start_date": request.form.get("start_date", ""),
+        "end_date": request.form.get("end_date", "")
+    })
+
+    save_json(PROJECT_FILE, data)
+
+    return redirect(url_for("index"))
+
+# ---------------- VIEW PROJECT ----------------
+@app.route("/project/<name>")
+@login_required
+def view_project(name):
+    data = load_json(PROJECT_FILE)
+    project = next((p for p in data if p["name"] == name), None)
+
+    if not project:
+        return "Projet introuvable"
+
+    summary = compute_summary(project)
+    alerts = generate_alerts(summary)
+
+    table_rows = []
+    for idx, e in enumerate(project["expenses"]):
+        budget_cat = project["categories"].get(e["category"], 0)
+        spent = sum(exp["amount"] for exp in project["expenses"] if exp["category"] == e["category"])
+        remaining = budget_cat - spent
+        percent = (spent / budget_cat * 100) if budget_cat > 0 else 0
+
+        table_rows.append({
+            "index": idx,
+            "title": e["title"],
+            "category": e["category"],
+            "amount": e["amount"],
+            "budget": budget_cat,
+            "remaining": remaining,
+            "percent": round(percent, 1),
+            "date": e["date"]
+        })
+
+    return render_template("project.html", project=project, summary=summary, table_rows=table_rows, alerts=alerts)
+
+# ---------------- ADD EXPENSE ----------------
+@app.route("/add_expense/<project_name>", methods=["POST"])
+@login_required
+def add_expense(project_name):
+    data = load_json(PROJECT_FILE)
+    project = next((p for p in data if p["name"] == project_name), None)
+
+    if not project:
+        return "Projet introuvable"
+
+    title = request.form["title"]
+    category = request.form["category"]
+    amount = float(request.form["amount"])
+    date = request.form.get("date", "")
+
+    budget_input = request.form.get("budget", "")
+
+    if category not in project["categories"]:
+        project["categories"][category] = float(budget_input) if budget_input else 0
+    elif budget_input:
+        project["categories"][category] = float(budget_input)
+
+    project["expenses"].append({
+        "title": title,
+        "category": category,
+        "amount": amount,
+        "date": date
+    })
+
+    save_json(PROJECT_FILE, data)
+
+    return redirect(url_for("view_project", name=project_name, success=1))
+
+# ---------------- EDIT / DELETE ----------------
+@app.route("/edit_expense/<project_name>/<int:expense_index>", methods=["POST"])
+@login_required
+def edit_expense(project_name, expense_index):
+    data = load_json(PROJECT_FILE)
+    project = next((p for p in data if p["name"] == project_name), None)
+
+    if not project:
+        return "Projet introuvable"
+
+    e = project["expenses"][expense_index]
+
+    e["title"] = request.form["title"]
+    e["category"] = request.form["category"]
+    e["amount"] = float(request.form["amount"])
+
+    save_json(PROJECT_FILE, data)
+    return redirect(url_for("view_project", name=project_name))
+
+@app.route("/delete_expense/<project_name>/<int:expense_index>", methods=["POST"])
+@login_required
+def delete_expense(project_name, expense_index):
+    data = load_json(PROJECT_FILE)
+    project = next((p for p in data if p["name"] == project_name), None)
+
+    if project:
+        del project["expenses"][expense_index]
+        save_json(PROJECT_FILE, data)
+
+    return redirect(url_for("view_project", name=project_name))
+
+# ---------------- EXPORT ----------------
+@app.route("/export_excel/<project_name>")
+@login_required
+def export_excel(project_name):
+    data = load_json(PROJECT_FILE)
+    project = next((p for p in data if p["name"] == project_name), None)
+
+    df = pd.DataFrame(project["expenses"])
+
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False)
+
+    output.seek(0)
+
+    return send_file(output, download_name="expenses.xlsx", as_attachment=True)
+
+# ---------------- CHARTS ----------------
+@app.route("/chart/interactive/<name>")
+@login_required
+def chart_interactive(name):
+    project = next((p for p in load_json(PROJECT_FILE) if p["name"] == name), None)
+
+    if not project:
+        return "Erreur"
+
+    summary = compute_summary(project)
+
+    df = pd.DataFrame(summary)
+
+    fig = px.pie(df, names="category", values="spent")
+    return fig.to_html(full_html=False)
+
+@app.route("/chart/timeline/<name>")
+@login_required
+def chart_timeline(name):
+    project = next((p for p in load_json(PROJECT_FILE) if p["name"] == name), None)
+
+    df = pd.DataFrame(project["expenses"])
+
+    if df.empty:
+        return "Pas de données"
+
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.groupby("date")["amount"].sum().reset_index()
+
+    fig = px.line(df, x="date", y="amount", markers=True)
+    return fig.to_html(full_html=False)
+
+# ---------------- RUN ----------------
+if __name__ == "__main__":
+    app.run(debug=True)        return "<p>Identifiants incorrects.</p><a href='/login'>Retour</a>"
     return render_template("login.html")
 
 @app.route("/logout")
